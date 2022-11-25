@@ -1,52 +1,105 @@
-name: Redis Cluster
+Skip to content
+ 
+Search…
+All gists
+Back to GitHub
+@Abdelkad3r 
+@bubba-h57
+bubba-h57/phpunit.yml
+Created 3 years ago • Report abuse
+4
+0
+Code
+Revisions
+1
+Stars
+4
+<script src="https://gist.github.com/bubba-h57/216ddc79615ca5c0c441cfbdd6f7ad01.js"></script>
+Github Actions Continuous Integration/Testing workflow for PHP 7.4, Laravel 7, MariaDb, & Redis.
+phpunit.yml
+name: Laravel 7, MariaDb, & Redis CI
 
-on: [push]
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
 
 jobs:
-
-  cluster:
-    name: Cluster ${{ matrix.redis }}
+  continuous-integration:
+    name: Laravel (PHP ${{ matrix.php-versions }})
     runs-on: ubuntu-latest
-    timeout-minutes: 10
 
+    env:
+      DB_DATABASE: laravel
+      DB_USERNAME: root
+      DB_PASSWORD: password
+      DB_HOST: 127.0.0.1
+      DB_PORT: 32574
+      REDIS_PORT: 6379
+      BROADCAST_DRIVER: log
+      CACHE_DRIVER: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      MYSQL_ALLOW_EMPTY_PASSWORD: false
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: laravel
+    services:
+      mariadb:
+        image: mariadb:10.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: false
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: laravel
+        ports:
+          - 32574:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+      redis:
+        image: redis
+        ports:
+          - 6379/tcp
+        options: --health-cmd="redis-cli ping" --health-interval=10s --health-timeout=5s --health-retries=3
     strategy:
       fail-fast: false
       matrix:
-        redis: ['4.0.14', '6.2.0', '7.0.3']
+        php-versions: ['7.4']
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
 
-      # TODO: Start a Redis Cluster
-      #   - Use ${{ matrix.redis }} for version
-      #   - Must have at least 3 primary nodes with 1 replica each
-      #   - Cluster must require a password for connections
-      #   - Is `bitnami/redis-cluster` a good choice?
-      - name: Start Redis cluster
-        uses: vishnudxb/redis-cluster@1.0.5
+      - name: Setup PHP, with composer and extensions
+        uses: shivammathur/setup-php@v2 #https://github.com/shivammathur/setup-php
         with:
-          master1-port: 5000
-          master2-port: 5001
-          master3-port: 5002
-          slave1-port: 5003
-          slave2-port: 5004
-          slave3-port: 5005
+          php-version: ${{ matrix.php-versions }}
+          extensions: mbstring, dom, fileinfo, mysql, libxml, xml, xmlwriter, dom, tokenizer, filter, json, phar, pcre, openssl, pdo, intl, curl
+          coverage: xdebug #optional
 
+      - name: Get composer cache directory
+        id: composer-cache
+        run: echo "::set-output name=dir::$(composer config cache-files-dir)"
 
-      - name: Install dependencies
-        run: sudo apt-get install -y redis-tools
+      - name: Cache composer dependencies
+        uses: actions/cache@v1
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          # Use composer.json for key, if composer.lock is not committed.
+          # key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.json') }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
 
-      - name: Health Check
-        # TODO: Adjust ips/ports if needed
-        run: redis-cli -p 5001 cluster nodes
+      - name: Install Composer dependencies
+        run: composer install --no-progress --no-suggest --prefer-dist --optimize-autoloader
 
-      - name: Test PHP connection
-        env:
-          # TODO: Adjust ips/ports if needed
-          REDIS_PRIMARIES: 172.17.0.3:6379,172.17.0.3:6380,172.17.0.3:6381
-          REDIS_AUTH: secret
+      - name: Prepare the application
         run: |
-          docker ps -a
-          php cluster.php
-  
+          php -r "copy('.env.testing', '.env');"
+          php artisan key:generate
+      - name: Clear Config
+        run: php artisan config:clear
+
+      - name: Run Migration
+        run: php artisan migrate -v
+
+      - name: Test with phpunit
+        run: vendor/bin/phpunit --coverage-text
