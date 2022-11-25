@@ -1,22 +1,3 @@
-Skip to content
- 
-Search…
-All gists
-Back to GitHub
-@Abdelkad3r 
-@bubba-h57
-bubba-h57/phpunit.yml
-Created 3 years ago • Report abuse
-4
-0
-Code
-Revisions
-1
-Stars
-4
-<script src="https://gist.github.com/bubba-h57/216ddc79615ca5c0c441cfbdd6f7ad01.js"></script>
-Github Actions Continuous Integration/Testing workflow for PHP 7.4, Laravel 7, MariaDb, & Redis.
-phpunit.yml
 name: Laravel 7, MariaDb, & Redis CI
 
 on:
